@@ -1,29 +1,90 @@
 var secrets = require('../secrets');
 
-var Bing = require('node-bing-api')({ accKey: secrets.api_key });
+var Bing = require('./bing')({ accKey: secrets.api_key });
 
 var request = require('request');
 
-module.exports = {
+var elasticsearch = require('elasticsearch');
+
+var esClient = elasticsearch.Client({
+    host: secrets.elasticsearch.host
+});
+
+var Requester = {
 
     wordToImage : function (req, res, next) {
 
-        // if image is in my db
-        // return image
+        var word = req.params.image;
 
-        // else
-        Bing.images(req.params.image, function(err, _, body) {
+        var that = this;
+
+        esClient.get({
+            index : 'store',
+            type : 'images',
+            id : word
+        }).then(function (body) {
+            // we got it back
+
+            try {
+
+                var url = body._source.url;
+                console.log('found', url)
+
+                request.get(url).pipe(res);
+
+            } catch (err) {
+                console.error('oops, not found');
+                Requester.loadFromBing(req, res, next);
+            }
+
+            // we don't have it
+        }, function (error) {
+            Requester.loadFromBing(req, res, next);
+        });
+
+
+    },
+
+    loadFromBing: function(req, res, next) {
+
+        var word = req.params.image;
+
+        Bing.images(word, function(err, resp, body) {
             if (err) {
                 return next(err);
             }
 
+            // console.log(body, resp)
+
             var url = body.d.results[0].MediaUrl;
 
-            console.log(url);
+            console.log("saving", url);
 
-            request.get(url).pipe(res);
+            esClient.create({
+                index: 'store',
+                type: 'images',
+                id: word,
+                body: {
+                    word: word,
+                    url: url
+                }
+            }, function (error, response) {
+              if (error) {
+                console.log('could not save!')
+              }
+            });
 
-        }, {top : 1, skip: 1})
+            request.get(url)
+                .pipe(res);
+
+        }, {
+            top : 1, 
+            skip: 0, 
+            imageFilters : "Size:Medium%2BFace:Face"
+
+        })
     }
 
-}
+};
+
+module.exports = Requester;
