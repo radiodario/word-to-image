@@ -81,8 +81,6 @@ var Bing = function( options ) {
 
     }, function(err, res, body){
 
-      console.log(body)
-
       // Parse body, if body
       body = typeof body === 'string'
                ? JSON.parse(body)

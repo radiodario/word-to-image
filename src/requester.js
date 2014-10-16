@@ -10,9 +10,11 @@ var esClient = elasticsearch.Client({
     host: secrets.elasticsearch.host
 });
 
+// DRY THE FUCK OUT OF THIS
+
 var Requester = {
 
-    wordToImage : function (req, res, next) {
+    people: function(req, res, next) {
 
         var word = req.params.image;
 
@@ -20,7 +22,7 @@ var Requester = {
 
         esClient.get({
             index : 'store',
-            type : 'images',
+            type : 'people',
             id : word
         }).then(function (body) {
             // we got it back
@@ -34,18 +36,66 @@ var Requester = {
 
             } catch (err) {
                 console.error('oops, not found');
-                Requester.loadFromBing(req, res, next);
+                Requester.loadFromBing(req, res, next, {
+                    top : 1,
+                    skip: 1,
+                    imageFilters : "Size:Medium%2BFace:Face"
+                }, 'people');
             }
 
             // we don't have it
         }, function (error) {
-            Requester.loadFromBing(req, res, next);
+            Requester.loadFromBing(req, res, next, {
+                top : 1,
+                skip: 1,
+                imageFilters : "Size:Medium%2BFace:Face"
+            }, 'people');
+        });
+
+    },
+
+    things : function (req, res, next) {
+
+        var word = req.params.image;
+
+        var that = this;
+
+        esClient.get({
+            index : 'store',
+            type : 'things',
+            id : word
+        }).then(function (body) {
+            // we got it back
+
+            try {
+
+                var url = body._source.url;
+                console.log('found', url)
+
+                request.get(url).pipe(res);
+
+            } catch (err) {
+                console.error('oops, not found');
+                Requester.loadFromBing(req, res, next, {
+                    top : 1,
+                    skip: 0,
+                    imageFilters : "Size:Medium"
+                }, "things");
+            }
+
+            // we don't have it
+        }, function (error) {
+            Requester.loadFromBing(req, res, next, {
+                top : 1,
+                skip: 0,
+                imageFilters : "Size:Medium"
+            }, "things");
         });
 
 
     },
 
-    loadFromBing: function(req, res, next) {
+    loadFromBing: function(req, res, next, options, type) {
 
         var word = req.params.image;
 
@@ -54,15 +104,19 @@ var Requester = {
                 return next(err);
             }
 
-            // console.log(body, resp)
+            var results = body.d.results;
 
-            var url = body.d.results[0].MediaUrl;
+            var url = "https://assets.digital.cabinet-office.gov.uk/government/assets/blank-person-07d1653f840307220b203ecb834f5904.png"
+
+            if (results.length) {
+                url = body.d.results[0].MediaUrl;
+            }
 
             console.log("saving", url);
 
             esClient.create({
                 index: 'store',
-                type: 'images',
+                type: type,
                 id: word,
                 body: {
                     word: word,
@@ -70,19 +124,14 @@ var Requester = {
                 }
             }, function (error, response) {
               if (error) {
-                console.log('could not save!')
+                console.log('could not save!', error, response)
               }
             });
 
             request.get(url)
                 .pipe(res);
 
-        }, {
-            top : 1, 
-            skip: 0, 
-            imageFilters : "Size:Medium%2BFace:Face"
-
-        })
+        }, options);
     }
 
 };

@@ -4,7 +4,9 @@ var requester = require('./src/requester.js');
 
 var app = express()
 
-app.get('/:image', requester.wordToImage);
+app.get('/:image', requester.things);
+app.get('/things/:image', requester.things);
+app.get('/people/:image', requester.people);
 
 var server = app.listen(3000, function () {
 
